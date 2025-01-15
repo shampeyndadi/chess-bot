@@ -1,1 +1,1 @@
-still in early stages of development. very stupid bot
+still in early stages of development. this bot is still very stupid
