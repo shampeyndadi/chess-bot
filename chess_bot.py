@@ -11,30 +11,78 @@ PIECE_VALUES = {
     chess.KING: 1000 
 }
 
+transpo_table = {}
+
 def evaluateBoard(board):
     if board.is_checkmate():
-        return float('inf') if board.turn == chess.BLACK else float('-inf')
-    if board.is_stalemate():
+        return float('-inf') if board.turn else float('inf')
+    if board.is_stalemate() or board.is_insufficient_material():
         return 0
     
     score = 0
 
-    for piece in PIECE_VALUES:
-        score += len(board.pieces(piece, chess.WHITE)) * PIECE_VALUES[piece]
-        score -= len(board.pieces(piece, chess.BLACK)) * PIECE_VALUES[piece]
+    for piece, value in PIECE_VALUES.items():
+        score += len(board.pieces(piece, chess.WHITE)) * value
+        score -= len(board.pieces(piece, chess.BLACK)) * value
+
+
+    CENTRAL_SQUARES = {chess.D4, chess.E4, chess.D5, chess.E5}
+    centerBonus = 1.0
+    for square in CENTRAL_SQUARES:
+        piece = board.piece_at(square)
+        if piece:
+            if piece.color == chess.WHITE:
+                score += centerBonus
+            else:
+                score -= centerBonus
+
+    score += 0.1 * len(list(board.legal_moves)) if board.turn == chess.WHITE else -0.1 * len(list(board.legal_moves))
+
+    if board.is_check():
+        score -= 1 if board.turn == chess.WHITE else -1
 
     return score
 
+def orderMoves(board):
+    def score(move):
+       to_square = move.to_square
+       CENTRAL_SQUARES = {chess.D4, chess.E4, chess.D5, chess.E5}
+       CENTRAL_BONUS = 1 if to_square in CENTRAL_SQUARES else 0
+
+       piece = board.piece_at(to_square)
+       captureBonus = PIECE_VALUES.get(piece.piece_type, 0) if piece else 0
+
+       check_bonus = 5 if board.gives_check(move) else 0
+
+       return CENTRAL_BONUS + captureBonus + check_bonus
+    
+    return sorted(board.legal_moves, key=score, reverse=True)
+
+def determineDepth(board):
+    numberOfMoves = len(list(board.legal_moves))
+
+    if numberOfMoves < 15:
+        return 6 if not board.turn else 5
+    elif numberOfMoves < 30:
+        return 4 if not board.turn else 3
+    else:
+        return 3
 
 #implement alpha beta pruning - game tree
-
 def alphaBetaPruning(board, depth, alpha, beta, player):
+
     if depth == 0 or board.is_game_over():
         return evaluateBoard(board)
     
+    hash_board = hash(board.fen())
+    
+    if hash_board in transpo_table:
+        return transpo_table[hash_board]
+
+    
     if player:
         bestValue = float('-inf')
-        for move in board.legal_moves:
+        for move in orderMoves(board):
             board.push(move)
             value = alphaBetaPruning(board, depth-1, alpha, beta, False)
             board.pop()
@@ -42,10 +90,11 @@ def alphaBetaPruning(board, depth, alpha, beta, player):
             alpha =  max(alpha, bestValue)
             if beta <= alpha:
                 break
+        transpo_table[hash_board] = bestValue
         return bestValue
     else:
         bestValue = float('inf')
-        for move in board.legal_moves:
+        for move in orderMoves(board):
             board.push(move)
             value = alphaBetaPruning(board, depth-1, alpha, beta, True)
             board.pop()
@@ -53,6 +102,7 @@ def alphaBetaPruning(board, depth, alpha, beta, player):
             beta = min(beta, bestValue);
             if beta <= alpha:
                 break
+        transpo_table[hash_board] = bestValue
         return bestValue 
 
 
@@ -89,8 +139,7 @@ def main():
     board = chess.Board()
     print("Starting new game\n")
 
-    print("Enter your color: 1 (White) or 2 (Black): ")
-    iPlay = input().strip()
+    iPlay = input("Enter your color: 1 (White) or 2 (Black): ").strip()
 
     if iPlay == "1":
         userIsWhite = True
@@ -105,12 +154,11 @@ def main():
 
         if board.turn == userIsWhite:
             print("\nChess Bot is thinking...")
-            move = getBestMoveIterative(board, max_depth=6, time_limit=5)
+            move = getBestMoveIterative(board, max_depth=determineDepth(board), time_limit=5)
             board.push(move)
             print(f"\nBot played: {move}")
         else:
-            print("Enter opponent's move: ")
-            opponentMove = input().strip()
+            opponentMove = input("\nEnter opponent's move: ").strip()
             try:
                 move = chess.Move.from_uci(opponentMove)
                 if move in board.legal_moves:
