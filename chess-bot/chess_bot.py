@@ -101,9 +101,47 @@ def pieceSafety(board):
     for square, piece in board.piece_map().items():
         attackers = len(board.attackers(not piece.color, square))
         defenders = len(board.attackers(piece.color, square))
+
+        piece_value = PIECE_VALUES[piece.piece_type]
+        positional_value = getPieceValue(piece, square)
+
         if attackers > defenders:
-            safety_score -= PIECE_VALUES[piece.piece_type] * 0.5  # Penalize unsafe positions
+            safety_score -= (piece_value + positional_value) * 0.7
+        elif defenders > attackers:
+            safety_score += (piece_value + positional_value) * 0.3  
+    
+        
+        if piece.piece_type == chess.KING and attackers > 0:
+            safety_score -= 5 * (piece_value + positional_value) 
+
     return safety_score
+
+def targetPieces(board):
+    target_score = 0
+
+    for move in board.legal_moves:
+        target_square = move.to_square
+        target_piece = board.piece_at(target_square)
+
+        if target_piece and target_piece.color != board.turn:
+            target_score += PIECE_VALUES[target_piece.piece_type] * 0.5
+    
+    return target_score
+
+def developmentScore(board):
+    undeveloped_squares_white = {chess.B1, chess.G1, chess.C1, chess.F1}
+    undeveloped_squares_black = {chess.B8, chess.G8, chess.C8, chess.F8}
+    dev_score = 0
+
+    for square in undeveloped_squares_white:
+        if board.piece_at(square) and board.piece_at(square).color == chess.WHITE:
+            dev_score -= 15  # Penalize undeveloped white pieces
+
+    for square in undeveloped_squares_black:
+        if board.piece_at(square) and board.piece_at(square).color == chess.BLACK:
+            dev_score += 15  # Penalize undeveloped black pieces
+
+    return dev_score
 
 def evaluateBoard(board):
     if board.is_checkmate():
@@ -112,7 +150,10 @@ def evaluateBoard(board):
         return 0
     
     score = 0
+
     score += pieceSafety(board)
+    score += targetPieces(board)
+    score += developmentScore(board)
 
     for piece, value in PIECE_VALUES.items():
         score += len(board.pieces(piece, chess.WHITE)) * value
@@ -143,7 +184,10 @@ def orderMoves(board):
     def score(move):
         piece = board.piece_at(move.to_square)
         positionBonus = getPieceValue(piece, move.to_square) if piece else 0
-        CENTRAL_SQUARES = {chess.D4, chess.E4, chess.D5, chess.E5}
+        CENTRAL_SQUARES = {chess.C3, chess.C4, chess.C5, chess.C6,
+                           chess.D3, chess.D6, chess.E3, chess.E6,
+                           chess.F3, chess.F4, chess.F5, chess.F6 }
+        
         central_bonus = 10 if move.to_square in CENTRAL_SQUARES else 0
         capture_bonus = PIECE_VALUES.get(piece.piece_type, 0) if piece else 0
         development_bonus = 2 if move.to_square in board.attacks(chess.D4) or board.attacks(chess.E4) else 0
