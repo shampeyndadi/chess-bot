@@ -4,14 +4,97 @@ import time
 
 PIECE_VALUES = {
     chess.PAWN: 100,
-    chess.KNIGHT: 300,
+    chess.KNIGHT: 320,
     chess.BISHOP: 320,
     chess.ROOK: 500,
     chess.QUEEN: 900,
     chess.KING: 10000 
 }
 
+PAWN_SQUARE_TABLE = [
+    0,  5, 10, 15, 15, 10,  5,  0,
+    0, 10, 15, 20, 20, 15, 10,  0,
+    0,  5, 10, 15, 15, 10,  5,  0,
+    0,  0,  0,  5,  5,  0,  0,  0,
+    0, -5, -5,  0,  0, -5, -5,  0,
+    0, -5,-10,-15,-15,-10, -5,  0,
+    0, -5,-10,-15,-15,-10, -5,  0,
+    0,  0,  0,  0,  0,  0,  0,  0,
+]
+
+KNIGHT_SQUARE_TABLE = [
+    -50,-40,-30,-30,-30,-30,-40,-50,
+    -40,-20,  0,  0,  0,  0,-20,-40,
+    -30,  0, 10, 15, 15, 10,  0,-30,
+    -30,  5, 15, 20, 20, 15,  5,-30,
+    -30,  0, 15, 20, 20, 15,  0,-30,
+    -30,  5, 10, 15, 15, 10,  5,-30,
+    -40,-20,  0,  5,  5,  0,-20,-40,
+    -50,-40,-30,-30,-30,-30,-40,-50,
+]
+
+BISHOP_SQUARE_TABLE = [
+    -20,-10,-10,-10,-10,-10,-10,-20,
+    -10,  5,  0,  0,  0,  0,  5,-10,
+    -10, 10, 10, 10, 10, 10, 10,-10,
+    -10,  0, 10, 10, 10, 10,  0,-10,
+    -10,  5,  5, 10, 10,  5,  5,-10,
+    -10,  0,  5, 10, 10,  5,  0,-10,
+    -10,  0,  0,  0,  0,  0,  0,-10,
+    -20,-10,-10,-10,-10,-10,-10,-20,
+]
+
+ROOK_SQUARE_TABLE = [
+    0, 0, 5, 10, 10, 5, 0, 0,
+    0, 0, 5, 10, 10, 5, 0, 0,
+    0, 0, 5, 10, 10, 5, 0, 0,
+    0, 0, 5, 10, 10, 5, 0, 0,
+    0, 0, 5, 10, 10, 5, 0, 0,
+    0, 0, 5, 10, 10, 5, 0, 0,
+    0, 0, 5, 10, 10, 5, 0, 0,
+    0, 0, 5, 10, 10, 5, 0, 0,
+]
+
+QUEEN_SQUARE_TABLE = [
+    -20,-10,-10, -5, -5,-10,-10,-20,
+    -10,  0,  5,  0,  0,  0,  0,-10,
+    -10,  5,  5,  5,  5,  5,  0,-10,
+     -5,  0,  5,  5,  5,  5,  0, -5,
+      0,  0,  5,  5,  5,  5,  0, -5,
+    -10,  5,  5,  5,  5,  5,  0,-10,
+    -10,  0,  5,  0,  0,  0,  0,-10,
+    -20,-10,-10, -5, -5,-10,-10,-20,
+]
+
+KING_SQUARE_TABLE = [
+    -30,-40,-40,-50,-50,-40,-40,-30,
+    -30,-40,-40,-50,-50,-40,-40,-30,
+    -30,-40,-40,-50,-50,-40,-40,-30,
+    -30,-40,-40,-50,-50,-40,-40,-30,
+    -20,-30,-30,-40,-40,-30,-30,-20,
+    -10,-20,-20,-20,-20,-20,-20,-10,
+      0,  0,  0,  0,  0,  0,  0,  0,
+     20, 20,  0,  0,  0,  0, 20, 20,
+]
+
 transpo_table = {}
+
+def getPieceValue(piece, square):
+    tables = {
+        chess.PAWN: PAWN_SQUARE_TABLE,
+        chess.KNIGHT: KNIGHT_SQUARE_TABLE,
+        chess.BISHOP: BISHOP_SQUARE_TABLE,
+        chess.ROOK: ROOK_SQUARE_TABLE,
+        chess.QUEEN: QUEEN_SQUARE_TABLE,
+        chess.KING: KING_SQUARE_TABLE,
+    }
+
+    table = tables.get(piece.piece_type, None)
+
+    if table is not None:
+        return table[square] if piece.color == chess.WHITE else -table[chess.square_mirror(square)] 
+    else:
+        return 0
 
 def pieceSafety(board):
     safety_score = 0
@@ -35,12 +118,8 @@ def evaluateBoard(board):
         score += len(board.pieces(piece, chess.WHITE)) * value
         score -= len(board.pieces(piece, chess.BLACK)) * value
 
-
     for square, piece in board.piece_map().items():
-        attackers = board.attackers(not piece.color , square)
-        defenders = board.attackers(piece.color, square)
-        if len(attackers) > 0 and len(defenders) == 0:
-            score -= PIECE_VALUES[piece.piece_type] if piece.color == chess.WHITE else -PIECE_VALUES[piece.piece_type]
+        score += getPieceValue(piece, square)
 
     for square in board.pieces(chess.PAWN, chess.WHITE):
         if board.is_attacked_by(chess.BLACK, square):
@@ -63,13 +142,14 @@ def evaluateBoard(board):
 def orderMoves(board):
     def score(move):
         piece = board.piece_at(move.to_square)
+        positionBonus = getPieceValue(piece, move.to_square) if piece else 0
         CENTRAL_SQUARES = {chess.D4, chess.E4, chess.D5, chess.E5}
-        central_bonus = 1 if move.to_square in CENTRAL_SQUARES else 0
+        central_bonus = 10 if move.to_square in CENTRAL_SQUARES else 0
         capture_bonus = PIECE_VALUES.get(piece.piece_type, 0) if piece else 0
         development_bonus = 2 if move.to_square in board.attacks(chess.D4) or board.attacks(chess.E4) else 0
         check_bonus = 5 if board.gives_check(move) else 0
-        safe_move_bonus = 1 if len(board.attackers(not board.turn, move.to_square)) == 0 else -5
-        return central_bonus + capture_bonus + check_bonus + safe_move_bonus + development_bonus
+        safe_move_bonus = 4 if len(board.attackers(not board.turn, move.to_square)) == 0 else -5
+        return central_bonus + capture_bonus + check_bonus + safe_move_bonus + development_bonus + positionBonus
 
     return sorted(board.legal_moves, key=score, reverse=True)
     
